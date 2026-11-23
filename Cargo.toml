@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "Event-sourced agent workflows with approval gates, crash recovery, idempotent side effects and an accountability trail."
-repository = "https://github.com/braylo-ai/fde-07-durable-hitl"
+repository = "https://github.com/braylo777/fde-07-durable-hitl"
 
 [lib]
 crate-type = ["rlib", "cdylib"]

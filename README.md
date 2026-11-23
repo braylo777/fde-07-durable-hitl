@@ -12,10 +12,10 @@ An agent that can issue a $900 refund needs a manager to approve it, and the app
 
 ## What it does
 
-- Event-sourced engine: state is a fold over history; each loop pass writes one event, so a crash at any event resumes to an identical history (tested at every crash point)
+- Event-sourced engine: state is a fold over history; each loop pass writes one event. A crash after any persisted event resumes to the same event sequence and final state (tested at every crash point)
 - Tasks with retries and exponential backoff; final failure runs saga compensations in reverse
 - Approval gates: conditional (amount over a limit), quorum, role check, separation of duties, duplicate-vote guard, timeout, one escalation
-- Idempotency keys on side effects: a task re-run after a crash returns its earlier result
+- Idempotency keys per workflow run (run_id or a hash of the start input): a task re-run after a crash returns its earlier result
 - Slack Block Kit and Teams Adaptive Card approval messages; Slack request-signature check with a 5-minute replay window
 - Hash-chained accountability trail of votes, refusals, escalations and side effects
 
@@ -24,6 +24,7 @@ An agent that can issue a $900 refund needs a manager to approve it, and the app
 - Not Temporal itself: no worker fleet, task queues or persistence layer; history is returned to the caller to store
 - Timers are virtual (signal timestamps), not wall-clock
 - No live Slack or Teams app: the message JSON and the signature check are real, the posting is not
+- The crash test stops after an event is saved; the 'effect ran but its event was lost' window relies on the side-effect store honouring the idempotency key
 
 ## Operations
 

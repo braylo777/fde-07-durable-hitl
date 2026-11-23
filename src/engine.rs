@@ -162,6 +162,20 @@ fn fold(history: &[Value]) -> State {
     s
 }
 
+/// Idempotency keys are per workflow *run*, not per definition: `input.run_id`, or a hash of
+/// the start input, so two refunds for two different orders never share a key.
+fn run_id(def: &Def, history: &[Value]) -> String {
+    let input = history.first().map(|e| e["input"].clone()).unwrap_or(Value::Null);
+    match input["run_id"].as_str() {
+        Some(r) => format!("{}/{r}", def.id),
+        None => {
+            use sha2::{Digest, Sha256};
+            let h = Sha256::digest(input.to_string().as_bytes());
+            format!("{}/{}", def.id, h.iter().take(6).map(|b| format!("{b:02x}")).collect::<String>())
+        }
+    }
+}
+
 pub struct Run {
     pub history: Vec<Value>,
     pub effects: Vec<Value>,
@@ -229,7 +243,7 @@ pub fn advance(
                     match next {
                         Some(d) => {
                             let c = def.steps[d].compensate.clone().unwrap();
-                            let out = run_task(&c, &s.ctx, &format!("{}:{}:compensate", def.id, def.steps[d].name), &mut effects).unwrap_or(json!({}));
+                            let out = run_task(&c, &s.ctx, &format!("{}:{}:compensate", run_id(def, &history), def.steps[d].name), &mut effects).unwrap_or(json!({}));
                             emit!(s, json!({"type": "Compensated", "step": def.steps[d].name, "with": c, "output": out}));
                         }
                         None => emit!(s, json!({"type": "WorkflowFailed", "step": step.name})),
@@ -238,7 +252,7 @@ pub fn advance(
                 }
                 if same && last["type"] == "StepFailed" {
                     let a = last["attempt"].as_u64().unwrap_or(1) as u32;
-                    s.now += 1000 * (1u64 << (a - 1)); // 1s, 2s, 4s… backoff
+                    s.now += 1000u64.saturating_mul(1u64 << (a.max(1) - 1).min(20)); // 1s, 2s, 4s… capped
                     emit!(s, json!({"type": "TimerFired", "step": step.name, "reason": "retry backoff"}));
                     continue;
                 }
@@ -249,7 +263,7 @@ pub fn advance(
                 // The attempt in `last` is in flight (or was interrupted by a crash): run it.
                 let attempt = s.attempts;
                 let injected = fail_times.get(&step.task).and_then(Value::as_u64).unwrap_or(0) as u32;
-                let key = format!("{}:{}", def.id, step.name);
+                let key = format!("{}:{}", run_id(def, &history), step.name);
                 let res = if attempt <= injected { Err("upstream 503 (injected)".to_string()) } else { run_task(&step.task, &s.ctx, &key, &mut effects) };
                 match res {
                     Ok(out) => emit!(s, json!({"type": "StepCompleted", "step": step.name, "output": out, "idempotency_key": key})),

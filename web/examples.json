@@ -394,5 +394,9 @@
         "now": 1767225642
       }
     }
-  ]
+  ],
+  "project": {
+    "n": 7,
+    "title": "Async Temporal Approval Gate"
+  }
 }
